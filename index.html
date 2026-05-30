@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>富永電機 補助金クロージングツール</title>
+<style>
+  :root{
+    --bg:#0f1419; --card:#1a2129; --line:#2a3340; --txt:#e6edf3; --sub:#8b97a5;
+    --accent:#ffb000; --ok:#3fb950; --ng:#f85149; --line-green:#06c755;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Hiragino Sans",sans-serif;background:var(--bg);color:var(--txt);line-height:1.6}
+  .wrap{max-width:760px;margin:0 auto;padding:16px}
+  header{padding:18px 0 8px}
+  h1{font-size:1.25rem;margin:0}
+  .meta{font-size:.78rem;color:var(--sub);margin-top:4px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0}
+  label{display:block;font-size:.85rem;color:var(--sub);margin:12px 0 4px}
+  select,input{width:100%;padding:11px 12px;background:#0f1620;border:1px solid var(--line);border-radius:9px;color:var(--txt);font-size:1rem}
+  .row{display:flex;gap:10px}.row>div{flex:1}
+  .seg{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+  .seg button{flex:1;min-width:90px;padding:10px;background:#0f1620;border:1px solid var(--line);border-radius:9px;color:var(--sub);cursor:pointer;font-size:.9rem}
+  .seg button.on{background:var(--accent);color:#1a1200;border-color:var(--accent);font-weight:700}
+  .calc{width:100%;margin-top:18px;padding:14px;background:var(--accent);color:#1a1200;border:none;border-radius:11px;font-size:1.05rem;font-weight:800;cursor:pointer}
+  /* result */
+  #result{display:none}
+  .verdict{padding:14px;border-radius:11px;font-weight:800;text-align:center;font-size:1.05rem;margin-bottom:14px}
+  .verdict.ok{background:rgba(63,185,80,.15);color:var(--ok);border:1px solid var(--ok)}
+  .verdict.ng{background:rgba(248,81,73,.15);color:var(--ng);border:1px solid var(--ng)}
+  .big{font-size:2rem;font-weight:800;color:var(--accent);margin:2px 0}
+  .kv{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:.95rem}
+  .kv:last-child{border:none}
+  .kv .k{color:var(--sub)}
+  .warn{font-size:.8rem;color:var(--accent);background:rgba(255,176,0,.08);padding:10px;border-radius:8px;margin-top:10px}
+  .cust{background:#0f1620;border:1px dashed var(--line);border-radius:10px;padding:14px;margin-top:14px;white-space:pre-wrap;font-size:.9rem}
+  .copy{width:100%;margin-top:10px;padding:12px;background:var(--line-green);color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-size:.95rem}
+  .note{font-size:.75rem;color:var(--sub);margin-top:8px}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>⚡ 富永電機 補助金クロージングツール</h1>
+    <div class="meta" id="metaLine"></div>
+  </header>
+
+  <!-- 入力 -->
+  <div class="card">
+    <label>① 施工内容</label>
+    <select id="seido"></select>
+
+    <div id="planBox">
+      <label>② プラン / 条件</label>
+      <select id="plan"></select>
+    </div>
+
+    <!-- 動的な数量入力 -->
+    <div id="qtyBox">
+      <label id="qtyLabel">③ 数量</label>
+      <input id="qty" type="number" min="0" step="0.1" value="0">
+    </div>
+
+    <!-- 工事費（rate方式で使用） -->
+    <div id="costBox" style="display:none">
+      <label>③ 設備費＋工事費の合計（税抜・円）</label>
+      <input id="cost" type="number" min="0" step="1000" value="0">
+    </div>
+
+    <label>④ お客さまの所在地</label>
+    <select id="ku"></select>
+
+    <label>⑤ 契約はもう済んでいる？（重要）</label>
+    <div class="seg" id="contractSeg">
+      <button data-v="no" class="on">まだ（事前申込できる）</button>
+      <button data-v="yes">もう契約した</button>
+    </div>
+
+    <button class="calc" onclick="run()">実質負担額を計算</button>
+  </div>
+
+  <!-- 結果 -->
+  <div class="card" id="result">
+    <div class="verdict" id="verdict"></div>
+
+    <div class="kv"><span class="k">補助金（概算）</span><span><span class="big" id="hojo">¥0</span></span></div>
+    <div class="kv"><span class="k">工事費の目安</span><span id="kojiOut">—</span></div>
+    <div class="kv"><span class="k">実質ご負担額</span><span class="big" id="jisshitsu" style="font-size:1.4rem">¥0</span></div>
+    <div class="kv"><span class="k">事前申込の締切</span><span id="deadline">—</span></div>
+
+    <div class="warn" id="warnBox"></div>
+
+    <!-- 顧客向け（LINE貼り付け用） -->
+    <div class="cust" id="custText"></div>
+    <button class="copy" onclick="copyCust()">📱 LINE用テキストをコピー</button>
+    <div class="note" id="urlNote"></div>
+    <div class="note">※ 補助額は概算。最新要綱・対象経費上限により変動します。最終額は申請時に確定。</div>
+  </div>
+</div>
+
+<script src="seido-master.js"></script>
+<script>
+const M = window.SEIDO_MASTER;
+let contractDone = false;
+
+// ---- 初期化 ----
+document.getElementById("metaLine").textContent =
+  `${M.メタ.年度}／基準日 ${M.メタ.基準日}　※顧客向けは「契約前の事前申込」が必須`;
+
+const seidoSel = document.getElementById("seido");
+M.制度.forEach((s,i)=> seidoSel.add(new Option(`${s.name}`, i)));
+
+const kuSel = document.getElementById("ku");
+Object.keys(M.区).forEach(k=> kuSel.add(new Option(k,k)));
+
+seidoSel.onchange = renderPlan;
+renderPlan();
+
+// 契約済みトグル
+document.querySelectorAll("#contractSeg button").forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll("#contractSeg button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");
+    contractDone = b.dataset.v==="yes";
+  };
+});
+
+function curSeido(){ return M.制度[seidoSel.value]; }
+
+function renderPlan(){
+  const s = curSeido();
+  const planSel = document.getElementById("plan");
+  planSel.innerHTML="";
+  const planBox = document.getElementById("planBox");
+
+  if(s.方式==="rate"){
+    // V2H等: プラン=上限の種類
+    planBox.style.display="block";
+    Object.keys(s.上限).forEach(k=> planSel.add(new Option(k,k)));
+    document.getElementById("qtyBox").style.display="none";
+    document.getElementById("costBox").style.display="block";
+  } else {
+    planBox.style.display="block";
+    Object.keys(s.プラン).forEach(k=> planSel.add(new Option(k,k)));
+    document.getElementById("qtyBox").style.display="block";
+    document.getElementById("costBox").style.display="none";
+    const lbl = document.getElementById("qtyLabel");
+    if(s.方式==="per_kwh") lbl.textContent="③ 蓄電池の容量（kWh）";
+    else if(s.方式==="per_unit") lbl.textContent="③ 台数";
+    else if(s.方式==="per_kw") lbl.textContent="③ 太陽光の出力（kW）";
+    else lbl.textContent="③ 数量";
+  }
+}
+
+const yen = n => "¥"+Math.round(n).toLocaleString("ja-JP");
+
+function run(){
+  const s = curSeido();
+  const plan = document.getElementById("plan").value;
+  const kuName = kuSel.value;
+  let hojo=0, koji=null;
+
+  if(s.方式==="rate"){
+    const cost = +document.getElementById("cost").value || 0;
+    koji = cost;
+    hojo = Math.min(cost * s.補助率, s.上限[plan]);
+  } else {
+    const qty = +document.getElementById("qty").value || 0;
+    const tanka = s.プラン[plan];
+    hojo = qty * tanka;
+    if(s.対象経費上限) hojo = Math.min(hojo, s.対象経費上限);
+  }
+
+  // 区の上乗せ（確定分のみ加算。江戸川区は未確定なので注記だけ）
+  const ku = M.区[kuName];
+
+  const jisshitsu = koji!=null ? Math.max(koji - hojo, 0) : null;
+
+  // ---- 事前申込の可否判定 ----
+  const v = document.getElementById("verdict");
+  let okFlag = true;
+  if(s.事前申込必須 && contractDone){
+    okFlag=false;
+    v.className="verdict ng";
+    v.textContent="⛔ 契約済み → この補助金は使えません（事前申込が契約前必須）";
+  } else if(s.事前申込必須){
+    v.className="verdict ok";
+    v.textContent="✅ まだ契約前 → 事前申込すれば対象。今すぐ申込を！";
+  } else {
+    v.className="verdict ok";
+    v.textContent="✅ 対象";
+  }
+
+  document.getElementById("hojo").textContent = yen(hojo);
+  document.getElementById("kojiOut").textContent = koji!=null ? yen(koji) : "（容量×単価で算出）";
+  document.getElementById("jisshitsu").textContent = jisshitsu!=null ? yen(jisshitsu) : "工事費入力で表示";
+  document.getElementById("deadline").textContent = M.共通ルール_顧客向け.事前申込必須
+    ? "契約前に事前申込（年度ごと要確認）" : "—";
+
+  // 警告
+  let warn = "⚠ "+ (s.要確認||"");
+  if(ku.上乗せあり && !ku.確定) warn += `\n⚠ ${kuName}の上乗せ補助あり（金額未確認）。確定後さらに負担減の可能性。`;
+  document.getElementById("warnBox").textContent = warn;
+
+  // 顧客向けテキスト（LINE貼り付け用）
+  const cust =
+`【${s.name}のご案内 / 富永電機】
+
+お客さまの場合の概算です👇
+・補助金：約${yen(hojo)}
+${jisshitsu!=null ? "・実質ご負担：約"+yen(jisshitsu)+"\n" : ""}・条件：${plan}
+
+‼ご注意‼
+この補助金は「ご契約の前に事前申込」が必須です。
+契約後の申込はできません。申込手続きは弊社で代行します。
+
+まずはお気軽にご相談ください😊
+富永電機`;
+  document.getElementById("custText").textContent = cust;
+
+  document.getElementById("urlNote").innerHTML =
+    `制度詳細：<a href="${s.url}" target="_blank">${s.url}</a>`;
+
+  document.getElementById("result").style.display="block";
+  document.getElementById("result").scrollIntoView({behavior:"smooth"});
+}
+
+function copyCust(){
+  navigator.clipboard.writeText(document.getElementById("custText").textContent)
+    .then(()=>{ const b=event.target; const t=b.textContent; b.textContent="✓ コピーしました"; setTimeout(()=>b.textContent=t,1500);});
+}
+</script>
+</body>
+</html>
